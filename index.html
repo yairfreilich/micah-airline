@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Micah's Fantastic Airline</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
+        
+        #airline-title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 16px;
+            border-radius: 8px;
+            border-left: 4px solid #00ffcc;
+            z-index: 10;
+        }
+
+        /* Cockpit Dashboard UI Overlay */
+        #dashboard {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 90px;
+            background: rgba(15, 15, 15, 0.95);
+            border-top: 3px solid #222;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            color: #00ffcc;
+            text-shadow: 0 0 5px rgba(0,255,204,0.5);
+            box-sizing: border-box;
+            padding: 0 10px;
+            z-index: 10;
+        }
+        .instrument {
+            text-align: center;
+            font-size: 11px;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #00ffcc44;
+        }
+        .instrument span { display: block; font-size: 16px; font-weight: bold; margin-top: 2px; }
+
+        /* Top Controls */
+        #hud-top {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+        .pro-btn {
+            background: rgba(0, 120, 215, 0.85);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.4);
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        .pro-btn:active { transform: scale(0.95); }
+
+        /* On-Screen Touch Controls for iPad / iPhone */
+        .touch-controls {
+            position: absolute;
+            bottom: 110px;
+            display: flex;
+            gap: 15px;
+            z-index: 15;
+            padding: 0 20px;
+            width: 100%;
+            box-sizing: border-box;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+        .control-group {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        .t-btn {
+            background: rgba(0, 255, 204, 0.2);
+            border: 2px solid #00ffcc;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            backdrop-filter: blur(4px);
+        }
+        .t-btn:active {
+            background: rgba(0, 255, 204, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="airline-title">✈️ Micah's Fantastic Airline</div>
+
+    <div id="hud-top">
+        <button class="pro-btn" onclick="toggleView()">View: <span id="view-name">External</span></button>
+    </div>
+
+    <!-- On-Screen Controls for iPad/iPhone Touchscreens -->
+    <div class="touch-controls">
+        <!-- Turning Left/Right -->
+        <div class="control-group">
+            <div class="t-btn" ontouchstart="keys['ArrowLeft']=true" ontouchend="keys['ArrowLeft']=false" onmousedown="keys['ArrowLeft']=true" onmouseup="keys['ArrowLeft']=false">◀</div>
+            <div class="t-btn" ontouchstart="keys['ArrowRight']=true" ontouchend="keys['ArrowRight']=false" onmousedown="keys['ArrowRight']=true" onmouseup="keys['ArrowRight']=false">▶</div>
+        </div>
+        <!-- Throttle Power W+ / S- -->
+        <div class="control-group">
+            <div class="t-btn" ontouchstart="keys['s']=true" ontouchend="keys['s']=false" onmousedown="keys['s']=true" onmouseup="keys['s']=false">S-</div>
+            <div class="t-btn" ontouchstart="keys['w']=true" ontouchend="keys['w']=false" onmousedown="keys['w']=true" onmouseup="keys['w']=false">W+</div>
+        </div>
+        <!-- Pitch Up/Down (Going Up/Down) -->
+        <div class="control-group">
+            <div class="t-btn" ontouchstart="keys['ArrowUp']=true" ontouchend="keys['ArrowUp']=false" onmousedown="keys['ArrowUp']=true" onmouseup="keys['ArrowUp']=false">▲</div>
+            <div class="t-btn" ontouchstart="keys['ArrowDown']=true" ontouchend="keys['ArrowDown']=false" onmousedown="keys['ArrowDown']=true" onmouseup="keys['ArrowDown']=false">▼</div>
+        </div>
+    </div>
+
+    <div id="dashboard">
+        <div class="instrument">AIRSPEED <span id="speed">120</span> <small>KT</small></div>
+        <div class="instrument">ALTITUDE <span id="alt">1000</span> <small>FT</small></div>
+        <div class="instrument">THROTTLE <span id="throttle">80</span><small>%</small></div>
+        <div class="instrument">PITCH <span id="pitch-val">0</span>°</div>
+    </div>
+
+    <!-- Include Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, airplane, cockpitInterior;
+        let isCockpitView = false;
+        let speed = 1.5, throttle = 80, pitch = 0, roll = 0;
+        let keys = {};
+        let cars = [];
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x3399ff);
+            scene.fog = new THREE.FogExp2(0xccddff, 0.0035);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 3000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const sun = new THREE.DirectionalLight(0xffffee, 1.2);
+            sun.position.set(400, 1000, 300);
+            scene.add(sun);
+
+            createWorld();
+            createAirplane();
+
+            window.addEventListener('keydown', (e) => keys[e.key] = true);
+            window.addEventListener('keyup', (e) => keys[e.key] = false);
+            
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            animate();
+        }
+
+        function createWorld() {
+            const seaGeo = new THREE.PlaneGeometry(10000, 10000);
+            const seaMat = new THREE.MeshStandardMaterial({ color: 0x0055aa, roughness: 0.1 });
+            const sea = new THREE.Mesh(seaGeo, seaMat);
+            sea.rotation.x = -Math.PI / 2;
+            sea.position.y = -1;
+            scene.add(sea);
+
+            const landGeo = new THREE.PlaneGeometry(3000, 3000);
+            const landMat = new THREE.MeshStandardMaterial({ color: 0x2e5c1e, roughness: 0.9 });
+            const land = new THREE.Mesh(landGeo, landMat);
+            land.rotation.x = -Math.PI / 2;
+            land.position.set(1500, 0, 0);
+            scene.add(land);
+
+            const runwayGeo = new THREE.PlaneGeometry(70, 2000);
+            const runwayMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+            const runway = new THREE.Mesh(runwayGeo, runwayMat);
+            runway.rotation.x = -Math.PI / 2;
+            runway.position.set(1500, 0.2, 0);
+            scene.add(runway);
+
+            const buildingMat = new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.4 });
+            for (let i = 0; i < 50; i++) {
+                const w = 40 + Math.random() * 60;
+                const h = 80 + Math.random() * 250;
+                const d = 40 + Math.random() * 60;
+                const building = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), buildingMat);
+                const bx = 800 + Math.random() * 1400;
+                const bz = (Math.random() - 0.5) * 2000;
+                if (Math.abs(bz) > 100) {
+                    building.position.set(bx, h / 2, bz);
+                    scene.add(building);
+                }
+            }
+
+            const carMat = new THREE.MeshStandardMaterial({ color: 0xcc2222 });
+            for (let i = 0; i < 12; i++) {
+                const car = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 12), carMat);
+                car.position.set(1400 + (Math.random() - 0.5) * 100, 1.5, (Math.random() - 0.5) * 1500);
+                scene.add(car);
+                cars.push(car);
+            }
+
+            const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+            for (let i = 0; i < 80; i++) {
+                const cloudGroup = new THREE.Group();
+                for (let p = 0; p < 4; p++) {
+                    const puff = new THREE.Mesh(new THREE.SphereGeometry(30 + Math.random() * 20, 8, 8), cloudMat);
+                    puff.position.set((Math.random() - 0.5) * 50, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 50);
+                    cloudGroup.add(puff);
+                }
+                cloudGroup.position.set((Math.random() - 0.5) * 8000, 300 + Math.random() * 50, (Math.random() - 0.5) * 8000);
+                scene.add(cloudGroup);
+            }
+        }
+
+        function createAirplane() {
+            airplane = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, metalness: 0.3 });
+            const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.2, 12, 16), bodyMat);
+            fuselage.rotation.x = Math.PI / 2;
+            airplane.add(fuselage);
+
+            const wings = new THREE.Mesh(new THREE.BoxGeometry(18, 0.2, 3), bodyMat);
+            wings.position.set(0, 0, 0.5);
+            airplane.add(wings);
+
+            const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 2), bodyMat);
+            tailFin.position.set(0, 1.5, 5.5);
+            airplane.add(tailFin);
+
+            cockpitInterior = new THREE.Group();
+            const dashMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+            const panel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.8, 0.2), dashMat);
+            panel.position.set(0, 0.5, -0.8);
+            cockpitInterior.add(panel);
+
+            const yokeMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+            const yokeCol = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.6), yokeMat);
+            yokeCol.rotation.x = Math.PI / 2;
+            yokeCol.position.set(0, 0.3, -0.6);
+            cockpitInterior.add(yokeCol);
+
+            airplane.add(cockpitInterior);
+            scene.add(airplane);
+            airplane.position.set(1500, 100, 0);
+        }
+
+        function toggleView() {
+            isCockpitView = !isCockpitView;
+            document.getElementById('view-name').innerText = isCockpitView ? "Cockpit" : "External";
+        }
+
+        function handleInput() {
+            // ArrowUp = Up mark (Go up / pitch nose down)
+            // ArrowDown = Down mark (Go down / pitch nose up)
+            if (keys['ArrowUp']) pitch -= 0.015;
+            if (keys['ArrowDown']) pitch += 0.015;
+
+            // ArrowLeft = Left mark (Turn left)
+            // ArrowRight = Right mark (Turn right)
+            if (keys['ArrowLeft']) roll += 0.02;
+            if (keys['ArrowRight']) roll -= 0.02;
+
+            if (keys['w'] || keys['W']) { throttle = Math.min(100, throttle + 0.5); speed = throttle * 0.03; }
+            if (keys['s'] || keys['S']) { throttle = Math.max(0, throttle - 0.5); speed = throttle * 0.03; }
+
+            if (!keys['ArrowLeft'] && !keys['ArrowRight']) roll *= 0.95;
+            if (!keys['ArrowUp'] && !keys['ArrowDown']) pitch *= 0.98;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            handleInput();
+
+            airplane.translateZ(-speed);
+            airplane.rotation.x = pitch;
+            airplane.rotation.z = roll;
+            airplane.rotation.y -= roll * 0.02;
+
+            if (airplane.position.y < 3) {
+                airplane.position.y = 3;
+                pitch = Math.max(0, pitch);
+            }
+
+            cars.forEach(car => {
+                car.position.z += 0.5;
+                if (car.position.z > 1000) car.position.z = -1000;
+            });
+
+            if (isCockpitView) {
+                const cockpitPos = new THREE.Vector3(0, 1.1, -0.5).applyQuaternion(airplane.quaternion).add(airplane.position);
+                camera.position.copy(cockpitPos);
+                camera.quaternion.copy(airplane.quaternion);
+                cockpitInterior.visible = true;
+            } else {
+                const offset = new THREE.Vector3(0, 6, 22).applyQuaternion(airplane.quaternion);
+                camera.position.copy(airplane.position).add(offset);
+                camera.lookAt(airplane.position);
+                cockpitInterior.visible = false;
+            }
+
+            document.getElementById('speed').innerText = Math.round(speed * 90);
+            document.getElementById('alt').innerText = Math.round(airplane.position.y * 12);
+            document.getElementById('throttle').innerText = Math.round(throttle);
+            document.getElementById('pitch-val').innerText = Math.round(pitch * 50);
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
